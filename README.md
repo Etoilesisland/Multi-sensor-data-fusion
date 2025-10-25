@@ -1,45 +1,54 @@
 # 🧩 Multi-sensor Data Fusion Dataset
 
-This repository contains multi-source sensor datasets designed for **indoor environment perception and human activity recognition** research.  
-The data come from light, temperature, and occupancy sensors collected under different indoor conditions.
+This repository provides multi-source indoor sensing data for **environment perception** and **human occupancy/localization** studies.  
+Data come from **light** and **temperature** sensors plus **occupancy/localization** traces.
 
 ---
 
-## 📁 Dataset Structure
+## 📁 Dataset Structure & Formats
 
-| File Name | Description |
-|------------|--------------|
-| `light_01`, `light_02`, `light_03` | Indoor light environment data (illuminance sensor readings, unit: lux) |
-| `temp_01`, `temp_02`, `temp_03` | Indoor thermal environment data (temperature sensor readings, unit: °C) |
-| `occupancy_01`, `occupancy_02`, `occupancy_03` | Human occupancy and localization data (binary occupancy or position coordinates) |
+| File names | Modality | Format | Notes |
+|---|---|---|---|
+| `light_01.pkl`, `light_02.pkl`, `light_03.pkl` | Indoor light (illuminance) | **PKL** (pandas DataFrame) | Illuminance (lux) with timestamps |
+| `temp_01.pkl`, `temp_02.pkl`, `temp_03.pkl` | Indoor thermal (temperature) | **PKL** (pandas DataFrame) | Temperature (°C) with timestamps |
+| `occupancy_01.geojson`, `occupancy_02.geojson`, `occupancy_03.geojson` | Occupancy / localization | **GeoJSON** (vector) | Point/LineString geometries with timestamps and IDs |
 
-Each group of files corresponds to synchronized data collected during the same experimental session, suitable for **multi-sensor fusion and model validation**.
+> **Time alignment:** All streams are time-calibrated. Use the timestamp fields to align modalities.
 
 ---
 
-## 🧠 Data Description
+## 🧠 Data Fields (typical)
 
-- **Sampling rate**: Refer to each file’s timestamp column (in seconds or milliseconds).  
-- **Format**: CSV or TXT, each line contains a timestamp and corresponding sensor readings.  
-- **Time synchronization**: All sensors were time-calibrated, enabling direct timestamp-based alignment.  
-- **Data fields**:
-  - *Light environment*: Illuminance intensity  
-  - *Thermal environment*: Temperature (and possibly humidity)  
-  - *Occupancy data*: Occupied status (`0` = unoccupied, `1` = occupied) or spatial coordinates  
+- **Light PKL**: `timestamp` (UTC ISO or epoch), `lux`
+- **Temp PKL**: `timestamp`, `temp_c`
+- **Occupancy GeoJSON**: geometry (`Point` or `LineString`), `timestamp`, `agent_id` (or `room`, `state`)
+
+> Exact column names may vary slightly by file; inspect the DataFrame/GeoDataFrame to confirm.
 
 ---
 
 ## ⚙️ Example Usage (Python)
 
+### 1) Load the modalities
 ```python
 import pandas as pd
+import geopandas as gpd
 
-light = pd.read_csv("light_01.csv")
-temp = pd.read_csv("temp_01.csv")
-occupancy = pd.read_csv("occupancy_01.csv")
+# Load PKL sensor streams
+light = pd.read_pickle("light_01.pkl")
+temp = pd.read_pickle("temp_01.pkl")
 
-# Merge datasets by timestamp
-merged = pd.merge_asof(light, temp, on="timestamp")
-merged = pd.merge_asof(merged, occupancy, on="timestamp")
+# Ensure timestamps are datetime and sorted
+for df in (light, temp):
+    df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+    df.sort_values("timestamp", inplace=True)
 
-print(merged.head())
+# Load occupancy/localization (GeoJSON)
+occ = gpd.read_file("occupancy_01.geojson")
+
+# Ensure datetime & CRS
+occ["timestamp"] = pd.to_datetime(occ["timestamp"], utc=True)
+if occ.crs is None:
+    # Set a known CRS if applicable (e.g., WGS84)
+    occ.set_crs("EPSG:4326", inplace=True)  # change if your data uses another CRS
+occ = occ.sort_values("timestamp")
